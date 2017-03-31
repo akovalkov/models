@@ -871,14 +871,23 @@ class BeamEvalOutput : public OpKernel {
     const int batch_size = batch_state->BatchSize();
     std::vector<Sentence> documents;
     for (int beam_id = 0; beam_id < batch_size; ++beam_id) {
+      const auto &state = batch_state->Beam(beam_id);
       if (batch_state->Beam(beam_id).gold_ != nullptr &&
           batch_state->Beam(beam_id).AllFinal()) {
         ++all_final;
-        const auto &item = *batch_state->Beam(beam_id).slots_.rbegin();
+        const auto &item = *state.slots_.rbegin();
         ComputeTokenAccuracy(*item.second->state, batch_state->ScoringType(),
                              &num_tokens, &num_correct);
         documents.push_back(item.second->state->sentence());
         item.second->state->AddParseToDocument(&documents.back());
+      } else {
+        // just add sentence in output array without parse information
+        // may be empty, because vector always is populated to batch_size
+        if(!state.slots_.empty())
+        {
+          const auto &item = *state.slots_.rbegin();
+          documents.push_back(item.second->state->sentence());
+        }
       }
     }
     Tensor *output;
