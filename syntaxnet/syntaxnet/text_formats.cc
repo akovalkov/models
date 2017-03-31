@@ -420,9 +420,9 @@ class TokenizedTextFormat : public DocumentFormat {
     string text;
     for (const string &word : utils::Split(value, ' ')) {
       if (word.empty()) continue;
+      if (!text.empty()) text.append(" ");
       const int start = text.size();
       const int end = start + word.size() - 1;
-      if (!text.empty()) text.append(" ");
       text.append(word);
       Token *token = sentence->add_token();
       token->set_word(word);
