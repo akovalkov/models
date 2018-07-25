@@ -177,7 +177,7 @@ class VectorIn : public tensorflow::RandomAccessFile {
                       char *scratch) const {
     memcpy(scratch, buffer_.data(), buffer_.size());
     buffer_ = buffer_.substr(n);
-    result->set(scratch, n);
+    *result = tensorflow::StringPiece(scratch, n);
     expected_offset_ += n;
   }
 
