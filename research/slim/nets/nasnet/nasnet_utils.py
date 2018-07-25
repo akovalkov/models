@@ -133,8 +133,10 @@ def drop_path(net, keep_prob, is_training=True):
     noise_shape = [batch_size, 1, 1, 1]
     random_tensor = keep_prob
     random_tensor += tf.random_uniform(noise_shape, dtype=tf.float32)
-    binary_tensor = tf.floor(random_tensor)
-    net = tf.div(net, keep_prob) * binary_tensor
+    binary_tensor = tf.cast(tf.floor(random_tensor), net.dtype)
+    keep_prob_inv = tf.cast(1.0 / keep_prob, net.dtype)
+    net = net * keep_prob_inv * binary_tensor
+
   return net
 
 
@@ -399,7 +401,7 @@ class NasNetABaseCell(object):
 
   @tf.contrib.framework.add_arg_scope  # No public API. For internal use only.
   def _apply_drop_path(self, net, current_step=None,
-                       use_summaries=True, drop_connect_version='v3'):
+                       use_summaries=False, drop_connect_version='v3'):
     """Apply drop_path regularization.
 
     Args:
