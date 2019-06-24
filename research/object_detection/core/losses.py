@@ -26,9 +26,7 @@ Classification losses:
  * WeightedSoftmaxClassificationAgainstLogitsLoss
  * BootstrappedSigmoidClassificationLoss
 """
-from abc import ABCMeta
-from abc import abstractmethod
-
+import abc
 import tensorflow as tf
 
 from object_detection.core import box_list
@@ -40,12 +38,13 @@ slim = tf.contrib.slim
 
 class Loss(object):
   """Abstract base class for loss functions."""
-  __metaclass__ = ABCMeta
+  __metaclass__ = abc.ABCMeta
 
   def __call__(self,
                prediction_tensor,
                target_tensor,
                ignore_nan_targets=False,
+               losses_mask=None,
                scope=None,
                **params):
     """Call the loss function.
@@ -58,6 +57,11 @@ class Loss(object):
       ignore_nan_targets: whether to ignore nan targets in the loss computation.
         E.g. can be used if the target tensor is missing groundtruth data that
         shouldn't be factored into the loss.
+      losses_mask: A [batch] boolean tensor that indicates whether losses should
+        be applied to individual images in the batch. For elements that
+        are False, corresponding prediction, target, and weight tensors will not
+        contribute to loss computation. If None, no filtering will take place
+        prior to loss computation.
       scope: Op scope name. Defaults to 'Loss' if None.
       **params: Additional keyword arguments for specific implementations of
               the Loss.
@@ -71,9 +75,26 @@ class Loss(object):
         target_tensor = tf.where(tf.is_nan(target_tensor),
                                  prediction_tensor,
                                  target_tensor)
+      if losses_mask is not None:
+        tensor_multiplier = self._get_loss_multiplier_for_tensor(
+            prediction_tensor,
+            losses_mask)
+        prediction_tensor *= tensor_multiplier
+        target_tensor *= tensor_multiplier
+
+        if 'weights' in params:
+          params['weights'] = tf.convert_to_tensor(params['weights'])
+          weights_multiplier = self._get_loss_multiplier_for_tensor(
+              params['weights'],
+              losses_mask)
+          params['weights'] *= weights_multiplier
       return self._compute_loss(prediction_tensor, target_tensor, **params)
 
-  @abstractmethod
+  def _get_loss_multiplier_for_tensor(self, tensor, losses_mask):
+    loss_multiplier_shape = tf.stack([-1] + [1] * (len(tensor.shape) - 1))
+    return tf.cast(tf.reshape(losses_mask, loss_multiplier_shape), tf.float32)
+
+  @abc.abstractmethod
   def _compute_loss(self, prediction_tensor, target_tensor, **params):
     """Method to be overridden by implementations.
 
@@ -202,7 +223,9 @@ class WeightedSigmoidClassificationLoss(Loss):
         num_classes] representing the predicted logits for each class
       target_tensor: A float tensor of shape [batch_size, num_anchors,
         num_classes] representing one-hot encoded classification targets
-      weights: a float tensor of shape [batch_size, num_anchors]
+      weights: a float tensor of shape, either [batch_size, num_anchors,
+        num_classes] or [batch_size, num_anchors, 1]. If the shape is
+        [batch_size, num_anchors, 1], all the classses are equally weighted.
       class_indices: (Optional) A 1-D integer tensor of class indices.
         If provided, computes loss only for the specified class indices.
 
@@ -210,7 +233,6 @@ class WeightedSigmoidClassificationLoss(Loss):
       loss: a float tensor of shape [batch_size, num_anchors, num_classes]
         representing the value of the loss function.
     """
-    weights = tf.expand_dims(weights, 2)
     if class_indices is not None:
       weights *= tf.reshape(
           ops.indices_to_dense_vector(class_indices,
@@ -250,7 +272,9 @@ class SigmoidFocalClassificationLoss(Loss):
         num_classes] representing the predicted logits for each class
       target_tensor: A float tensor of shape [batch_size, num_anchors,
         num_classes] representing one-hot encoded classification targets
-      weights: a float tensor of shape [batch_size, num_anchors]
+      weights: a float tensor of shape, either [batch_size, num_anchors,
+        num_classes] or [batch_size, num_anchors, 1]. If the shape is
+        [batch_size, num_anchors, 1], all the classses are equally weighted.
       class_indices: (Optional) A 1-D integer tensor of class indices.
         If provided, computes loss only for the specified class indices.
 
@@ -258,7 +282,6 @@ class SigmoidFocalClassificationLoss(Loss):
       loss: a float tensor of shape [batch_size, num_anchors, num_classes]
         representing the value of the loss function.
     """
-    weights = tf.expand_dims(weights, 2)
     if class_indices is not None:
       weights *= tf.reshape(
           ops.indices_to_dense_vector(class_indices,
@@ -303,12 +326,15 @@ class WeightedSoftmaxClassificationLoss(Loss):
         num_classes] representing the predicted logits for each class
       target_tensor: A float tensor of shape [batch_size, num_anchors,
         num_classes] representing one-hot encoded classification targets
-      weights: a float tensor of shape [batch_size, num_anchors]
+      weights: a float tensor of shape, either [batch_size, num_anchors,
+        num_classes] or [batch_size, num_anchors, 1]. If the shape is
+        [batch_size, num_anchors, 1], all the classses are equally weighted.
 
     Returns:
       loss: a float tensor of shape [batch_size, num_anchors]
         representing the value of the loss function.
     """
+    weights = tf.reduce_mean(weights, axis=2)
     num_classes = prediction_tensor.get_shape().as_list()[-1]
     prediction_tensor = tf.divide(
         prediction_tensor, self._logit_scale, name='scale_logit')
@@ -349,12 +375,15 @@ class WeightedSoftmaxClassificationAgainstLogitsLoss(Loss):
         num_classes] representing the predicted logits for each class
       target_tensor: A float tensor of shape [batch_size, num_anchors,
         num_classes] representing logit classification targets
-      weights: a float tensor of shape [batch_size, num_anchors]
+      weights: a float tensor of shape, either [batch_size, num_anchors,
+        num_classes] or [batch_size, num_anchors, 1]. If the shape is
+        [batch_size, num_anchors, 1], all the classses are equally weighted.
 
     Returns:
       loss: a float tensor of shape [batch_size, num_anchors]
         representing the value of the loss function.
     """
+    weights = tf.reduce_mean(weights, axis=2)
     num_classes = prediction_tensor.get_shape().as_list()[-1]
     target_tensor = self._scale_and_softmax_logits(target_tensor)
     prediction_tensor = tf.divide(prediction_tensor, self._logit_scale,
@@ -408,7 +437,9 @@ class BootstrappedSigmoidClassificationLoss(Loss):
         num_classes] representing the predicted logits for each class
       target_tensor: A float tensor of shape [batch_size, num_anchors,
         num_classes] representing one-hot encoded classification targets
-      weights: a float tensor of shape [batch_size, num_anchors]
+      weights: a float tensor of shape, either [batch_size, num_anchors,
+        num_classes] or [batch_size, num_anchors, 1]. If the shape is
+        [batch_size, num_anchors, 1], all the classses are equally weighted.
 
     Returns:
       loss: a float tensor of shape [batch_size, num_anchors, num_classes]
@@ -423,7 +454,7 @@ class BootstrappedSigmoidClassificationLoss(Loss):
               tf.sigmoid(prediction_tensor) > 0.5, tf.float32)
     per_entry_cross_ent = (tf.nn.sigmoid_cross_entropy_with_logits(
         labels=bootstrap_target_tensor, logits=prediction_tensor))
-    return per_entry_cross_ent * tf.expand_dims(weights, 2)
+    return per_entry_cross_ent * weights
 
 
 class HardExampleMiner(object):
@@ -583,8 +614,10 @@ class HardExampleMiner(object):
   def summarize(self):
     """Summarize the number of positives and negatives after mining."""
     if self._num_positives_list and self._num_negatives_list:
-      avg_num_positives = tf.reduce_mean(tf.to_float(self._num_positives_list))
-      avg_num_negatives = tf.reduce_mean(tf.to_float(self._num_negatives_list))
+      avg_num_positives = tf.reduce_mean(
+          tf.cast(self._num_positives_list, dtype=tf.float32))
+      avg_num_negatives = tf.reduce_mean(
+          tf.cast(self._num_negatives_list, dtype=tf.float32))
       tf.summary.scalar('HardExampleMiner/NumPositives', avg_num_positives)
       tf.summary.scalar('HardExampleMiner/NumNegatives', avg_num_negatives)
 
@@ -628,12 +661,13 @@ class HardExampleMiner(object):
     """
     positives_indicator = tf.gather(match.matched_column_indicator(), indices)
     negatives_indicator = tf.gather(match.unmatched_column_indicator(), indices)
-    num_positives = tf.reduce_sum(tf.to_int32(positives_indicator))
-    max_negatives = tf.maximum(min_negatives_per_image,
-                               tf.to_int32(max_negatives_per_positive *
-                                           tf.to_float(num_positives)))
+    num_positives = tf.reduce_sum(tf.cast(positives_indicator, dtype=tf.int32))
+    max_negatives = tf.maximum(
+        min_negatives_per_image,
+        tf.cast(max_negatives_per_positive *
+                tf.cast(num_positives, dtype=tf.float32), dtype=tf.int32))
     topk_negatives_indicator = tf.less_equal(
-        tf.cumsum(tf.to_int32(negatives_indicator)), max_negatives)
+        tf.cumsum(tf.cast(negatives_indicator, dtype=tf.int32)), max_negatives)
     subsampled_selection_indices = tf.where(
         tf.logical_or(positives_indicator, topk_negatives_indicator))
     num_negatives = tf.size(subsampled_selection_indices) - num_positives

@@ -65,6 +65,8 @@ Extras:
   * <a href='g3doc/detection_model_zoo.md'>Tensorflow detection model zoo</a><br>
   * <a href='g3doc/exporting_models.md'>
       Exporting a trained model for inference</a><br>
+  * <a href='g3doc/tpu_exporters.md'>
+      Exporting a trained model for TPU inference</a><br>
   * <a href='g3doc/defining_your_own_model.md'>
       Defining your own model architecture</a><br>
   * <a href='g3doc/using_your_own_dataset.md'>
@@ -79,7 +81,7 @@ Extras:
       Run the evaluation for the Open Images Challenge 2018</a><br>
   * <a href='g3doc/tpu_compatibility.md'>
       TPU compatible detection pipelines</a><br>
-  *  <a href='g3doc/running_on_mobile_tensorflowlite.md'>
+  * <a href='g3doc/running_on_mobile_tensorflowlite.md'>
       Running object detection on mobile devices with TensorFlow Lite</a><br>
 
 ## Getting Help
@@ -98,6 +100,27 @@ reporting an issue.
 
 
 ## Release information
+
+### Feb 11, 2019
+
+We have released detection models trained on the [Open Images Dataset V4](https://storage.googleapis.com/openimages/web/challenge.html)
+in our detection model zoo, including
+
+* Faster R-CNN detector with Inception Resnet V2 feature extractor
+* SSD detector with MobileNet V2 feature extractor
+* SSD detector with ResNet 101 FPN feature extractor (aka RetinaNet-101)
+
+<b>Thanks to contributors</b>: Alina Kuznetsova, Yinxiao Li
+
+### Sep 17, 2018
+
+We have released Faster R-CNN detectors with ResNet-50 / ResNet-101 feature
+extractors trained on the [iNaturalist Species Detection Dataset](https://github.com/visipedia/inat_comp/blob/master/2017/README.md#bounding-boxes).
+The models are trained on the training split of the iNaturalist data for 4M
+iterations, they achieve 55% and 58% mean AP@.5 over 2854 classes respectively.
+For more details please refer to this [paper](https://arxiv.org/abs/1707.06642).
+
+<b>Thanks to contributors</b>: Chen Sun
 
 ### July 13, 2018
 

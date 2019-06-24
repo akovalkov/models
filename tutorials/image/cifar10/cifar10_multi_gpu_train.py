@@ -39,14 +39,15 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from datetime import datetime
 import os.path
 import re
 import time
+from datetime import datetime
 
 import numpy as np
-from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
+from six.moves import xrange  # pylint: disable=redefined-builtin
+
 import cifar10
 
 FLAGS = tf.app.flags.FLAGS
@@ -147,7 +148,7 @@ def train():
 
     # Calculate the learning rate schedule.
     num_batches_per_epoch = (cifar10.NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN /
-                             FLAGS.batch_size)
+                             FLAGS.batch_size / FLAGS.num_gpus)
     decay_steps = int(num_batches_per_epoch * cifar10.NUM_EPOCHS_PER_DECAY)
 
     # Decay the learning rate exponentially based on the number of steps.
@@ -266,7 +267,6 @@ def train():
 
 
 def main(argv=None):  # pylint: disable=unused-argument
-  cifar10.maybe_download_and_extract()
   if tf.gfile.Exists(FLAGS.train_dir):
     tf.gfile.DeleteRecursively(FLAGS.train_dir)
   tf.gfile.MakeDirs(FLAGS.train_dir)
